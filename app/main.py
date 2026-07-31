@@ -5,8 +5,7 @@ from . import models
 from .routers import posts, users, auth, votes
 
 # Create tables
-models.Base.metadata.create_all(bind=engine)
-
+# optional
 app = FastAPI()
 
 app.include_router(posts.router)

@@ -1,4 +1,4 @@
-from pydantic import BaseModel,EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional
 from datetime import datetime
 from pydantic.types import conint
@@ -11,8 +11,7 @@ class Post(PostBase):
     created_at: datetime
     user_id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 class PostCreate(PostBase):
     pass
@@ -26,9 +25,7 @@ class UsersOut(BaseModel):
     id: int
     email: EmailStr
     created_at: datetime
-
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 
