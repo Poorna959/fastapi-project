@@ -7,31 +7,30 @@ class PostBase(BaseModel):
     content: str
     published: bool = True
 class Post(PostBase):
-    id:int
+    id: int
     created_at: datetime
-    user_id:int
+    user_id: int
+
     class Config:
         orm_mode = True
 
 class PostCreate(PostBase):
-    id:Optional[int]= None
-    created_at: Optional[datetime] = None
+    pass
 
-
-class Users(BaseModel):
-    id:Optional[int]
-    email:EmailStr
-    password:str
-    created_at: Optional[datetime] = None
 class UsersCreate(BaseModel):
-    email:EmailStr
-    password:str
+    email: EmailStr
+    password: str
+
 
 class UsersOut(BaseModel):
     id: int
-    email:EmailStr
+    email: EmailStr
+    created_at: datetime
+
     class Config:
-            orm_mode = True
+        orm_mode = True
+
+
 
 class Userlogin(BaseModel):
     id:Optional[int] =None

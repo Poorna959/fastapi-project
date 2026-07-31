@@ -1,12 +1,30 @@
-import psycopg2
-from psycopg2.extras import RealDictCursor
-import time
-while True:
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
+
+from .config import settings
+
+DATABASE_URL = (
+    f"postgresql://{settings.database_username}:"
+    f"{settings.database_password}@"
+    f"{settings.database_hostname}:"
+    f"{settings.database_port}/"
+    f"{settings.database_name}"
+)
+
+engine = create_engine(DATABASE_URL)
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
+Base = declarative_base()
+
+
+def get_db():
+    db = SessionLocal()
     try:
-        conn=psycopg2.connect(host='localhost', database='fastapiapp', user='postgres', password='monkeyDluffy3!', cursor_factory=RealDictCursor)
-        cursor=conn.cursor()
-        print("Database connection was successful")
-        break
-    except psycopg2.Error as e:
-        print(f"Error connecting to PostgreSQL: {e}")
-        time.sleep(2)
+        yield db
+    finally:
+        db.close()

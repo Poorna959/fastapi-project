@@ -1,40 +1,45 @@
-from fastapi import APIRouter,HTTPException,status,Depends,Response
-from fastapi.security.oauth2 import OAuth2PasswordRequestForm
-from ..schemas import Userlogin,Token
-from ..database import cursor
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+
+from ..database import get_db
+from .. import models
+from ..schemas import Token
 from ..utils import verify
 from ..oauth import create_access_token
 
-router = APIRouter(tags=['Authentication'])
+router = APIRouter(tags=["Authentication"])
 
 
-@router.post("/login",response_model=Token)
-def login(user: OAuth2PasswordRequestForm = Depends()):
-    cursor.execute(
-        "SELECT * FROM users WHERE email = %s", 
-        (user.username,)
+@router.post("/login", response_model=Token)
+def login(
+    user_credentials: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+
+    user = (
+        db.query(models.User)
+        .filter(models.User.email == user_credentials.username)
+        .first()
     )
-    data = cursor.fetchone()
-    
-    if data is None:
+
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid credentials"
         )
-        
-    if not verify(user.password, data.get('password')):
+
+    if not verify(user_credentials.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid credentials"
         )
-        
-    
-    access_token = create_access_token(data={'user_id': data.get('id')})
-    
-    
+
+    access_token = create_access_token(
+        data={"user_id": user.id}
+    )
+
     return {
-    "access_token": access_token,
-    "token_type": "bearer"
+        "access_token": access_token,
+        "token_type": "bearer"
     }
-
-

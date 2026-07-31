@@ -1,103 +1,136 @@
-
-from fastapi import Response,status,HTTPException,APIRouter,Depends
-from ..schemas import Post,PostCreate
-from ..database import conn,cursor
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import Optional
-from .. import oauth
-router = APIRouter(prefix="/posts",tags=['Posts'])
 
+from .. import models, oauth
+from ..database import get_db
+from ..schemas import Post, PostCreate
 
-
-# @router.get("/", response_model=list[Post])
+router = APIRouter(
+    prefix="/posts",
+    tags=["Posts"]
+)
 @router.get("/")
 def get_posts(
     current_user=Depends(oauth.get_current_user),
+    db: Session = Depends(get_db),
     limit: int = 10,
     skip: int = 0,
     search: Optional[str] = ""
 ):
-    # cursor.execute(
-    #     """
-    #     SELECT * FROM posts
-    #     WHERE title ILIKE %s
-    #     ORDER BY id
-    #     LIMIT %s
-    #     OFFSET %s
-    #     """,
-    #     (f"%{search}%", limit, skip)
-    # )
-    cursor.execute("""SELECT posts.*, users.email, COUNT(votes.post_id) AS votes
-FROM posts
-JOIN users
-    ON posts.user_id = users.id
-LEFT JOIN votes
-    ON posts.id = votes.post_id
-WHERE posts.title ILIKE %s
-GROUP BY posts.id, users.id
-ORDER BY posts.id
-LIMIT %s
-OFFSET %s;""", (f"%{search}%", limit, skip))
-    posts = cursor.fetchall()
+
+    posts = (
+        db.query(
+            models.Post,
+            func.count(models.Vote.post_id).label("votes")
+        )
+        .join(models.User, models.Post.user_id == models.User.id)
+        .outerjoin(models.Vote, models.Post.id == models.Vote.post_id)
+        .filter(models.Post.title.ilike(f"%{search}%"))
+        .group_by(models.Post.id, models.User.id)
+        .limit(limit)
+        .offset(skip)
+        .all()
+    )
+
     return posts
 
-@router.post("/", status_code=status.HTTP_201_CREATED,response_model=PostCreate)
-def create_post(payload: PostCreate,current_user=Depends(oauth.get_current_user)):
-    cursor.execute(""" INSERT INTO POSTS (title,content,published,user_id) VALUES (%s,%s,%s,%s) RETURNING  * """,(payload.title,payload.content,payload.published,str(current_user['id'])))
-    new_posts=cursor.fetchone()
-    conn.commit()
-    return new_posts
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=Post)
+def create_post(
+    payload: PostCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(oauth.get_current_user)
+):
 
-# @router.get("/{id}",response_model=Post)
+    new_post = models.Post(
+        user_id=current_user.id,
+        **payload.model_dump()
+    )
+
+    db.add(new_post)
+    db.commit()
+    db.refresh(new_post)
+
+    return new_post
+
 @router.get("/{id}")
-def get_post(id: int,current_user=Depends(oauth.get_current_user)):
-    cursor.execute( """
-        SELECT posts.*, COUNT(votes.post_id) AS votes
-        FROM posts
-        LEFT JOIN votes
-            ON posts.id = votes.post_id
-        WHERE posts.id = %s
-        GROUP BY posts.id
-        """,
-        (id,))
-    post=cursor.fetchone()
-    if  not post:
-        # response.status_code = status.HTTP_404_NOT_FOUND
-        # return {"message": f"post with id: {id} was not found"}
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id: {id} was not found")
+def get_post(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(oauth.get_current_user)
+):
+
+    post = (
+        db.query(
+            models.Post,
+            func.count(models.Vote.post_id).label("votes")
+        )
+        .outerjoin(models.Vote, models.Post.id == models.Vote.post_id)
+        .filter(models.Post.id == id)
+        .group_by(models.Post.id)
+        .first()
+    )
+
+    if post is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Post with id {id} was not found"
+        )
+
     return post
 
-@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT,)
-def delete_post(id: int,current_user=Depends(oauth.get_current_user)):
-    cursor.execute( """
-        SELECT posts.*, COUNT(votes.post_id) AS votes
-        FROM posts
-        LEFT JOIN votes
-            ON posts.id = votes.post_id
-        WHERE posts.id = %s
-        GROUP BY posts.id
-        """,
-        (id,))
-    post=cursor.fetchone()
-    if not post:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id: {id} does not exist")
-    if post['user_id']!=current_user['id']:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Not authorised to performe the action")
-    cursor.execute(""" DELETE FROM posts WHERE id=%s """,(str(id),))
-    conn.commit()
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_post(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(oauth.get_current_user)
+):
+
+    post = db.query(models.Post).filter(models.Post.id == id).first()
+
+    if post is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Post with id {id} does not exist"
+        )
+
+    if post.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to perform this action"
+        )
+
+    db.delete(post)
+    db.commit()
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+@router.put("/{id}", response_model=Post)
+def update_post(
+    id: int,
+    payload: PostCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(oauth.get_current_user)
+):
 
+    post_query = db.query(models.Post).filter(models.Post.id == id)
 
-@router.put("/{id}",response_model=Post)     
-def update_posts(id:int,post:PostCreate,current_user=Depends(oauth.get_current_user)):
-    cursor.execute(f""" SELECT * FROM posts WHERE id= %s  """,(str(id),))
-    user_data=cursor.fetchone()
-    if not user_data:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id: {id} does not exist")
-    if user_data['user_id']!=current_user['id']:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Not authorised to performe the action")
+    post = post_query.first()
 
-    cursor.execute("""UPDATE posts SET title = %s,content=%s,published = %s RETURNING * """,(post.title,post.content,post.published,))
-    updated_post=cursor.fetchone()
-    conn.commit()
-    return updated_post
+    if post is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Post with id {id} does not exist"
+        )
+
+    if post.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to perform this action"
+        )
+
+    post_query.update(payload.model_dump(), synchronize_session=False)
+    db.commit()
+
+    return post_query.first()

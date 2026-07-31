@@ -1,26 +1,21 @@
-# from pydantic import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# class Settings(BaseSettings):
-#     database_hostname: str
-#     database_port: str
-#     database_password: str
-#     database_name: str
-#     database_username: str
-#     secret_key: str
-#     algorithm: str
-#     access_token_expire_minutes: int
 
-# settings = Settings()
-# THIS IS THE OLD WAY OF DOING IT, NOW WE ARE USING ENV FILES TO STORE SENSITIVE INFORMATION
-# THIS IS THE NEW WAY OF DOING IT, NOW WE ARE USING ENV FILES TO STORE SENSITIVE INFORMATION
-# THIS IS THE FILE THAT CONTAINS THE CONFIGURATION FOR THE APPLICATION, SUCH AS DATABASE CONNECTION DETAILS, SECRET KEYS, AND OTHER SETTINGS. IT IS IMPORTANT TO KEEP THIS FILE SECURE AND NOT EXPOSE IT IN PUBLIC REPOSITORIES.
-# IT IS RECOMMENDED TO USE ENVIRONMENT VARIABLES OR A .ENV FILE TO STORE SENSITIVE INFORMATION, AND LOAD THEM INTO THE APPLICATION USING A CONFIGURATION MANAGEMENT LIBRARY LIKE Pydantic'S BaseSettings.
-# IT IS USEFUL TO HAVE A CENTRALIZED CONFIGURATION FILE LIKE THIS, AS IT MAKES IT EASY TO CHANGE SETTINGS WITHOUT HAVING TO MODIFY THE CODE IN MULTIPLE PLACES.
+class Settings(BaseSettings):
+    database_hostname: str
+    database_port: int
+    database_password: str
+    database_name: str
+    database_username: str
 
-# TO USE THIS CONFIGURATION FILE, YOU CAN IMPORT THE SETTINGS OBJECT AND ACCESS THE VARIABLES AS ATTRIBUTES. FOR EXAMPLE, TO GET THE DATABASE HOSTNAME, YOU CAN USE settings.database_hostname.
-# TO USE ENVIRONMENT VARIABLES, YOU CAN CREATE A .ENV FILE IN THE ROOT DIRECTORY OF YOUR PROJECT AND DEFINE THE VARIABLES LIKE THIS:
-# DATABASE_HOSTNAME=localhost   
-# DATABASE_PORT=5432
-# DATABASE_PASSWORD=yourpassword
-# DATABASE_NAME=yourdatabase
-# DATABASE_USERNAME=yourusername
+    secret_key: str
+    algorithm: str
+    access_token_expire_minutes: int
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore"
+    )
+
+
+settings = Settings()
